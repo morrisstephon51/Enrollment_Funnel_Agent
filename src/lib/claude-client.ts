@@ -65,7 +65,7 @@ Tone: warm but data-informed. Avoid jargon. Write for a non-technical health pro
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6',
     max_tokens: 600,
     messages: [{ role: 'user', content: prompt }],
   })

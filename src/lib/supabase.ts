@@ -1,16 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config()
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+let _supabase: SupabaseClient | null = null
 
-if (!url || !key) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in env')
+function getSupabase(): SupabaseClient {
+  if (_supabase) return _supabase
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in env')
+  }
+  _supabase = createClient(url, key)
+  return _supabase
 }
-
-export const supabase = createClient(url, key)
 
 export interface ContentRecord {
   id: string
@@ -40,6 +44,7 @@ export async function fetchWeekContent(
   weekStart: Date,
   weekEnd: Date
 ): Promise<{ content: ContentRecord[]; performance: PerformanceRecord[] }> {
+  const supabase = getSupabase()
   const { data: slots, error: slotsErr } = await supabase
     .from('calendar_slots')
     .select(`
@@ -92,6 +97,7 @@ export async function fetchRollingEngagement(
   weeksBack: number,
   weekStart: Date
 ): Promise<number[]> {
+  const supabase = getSupabase()
   const totals: number[] = []
 
   for (let i = 1; i <= weeksBack; i++) {
@@ -133,6 +139,7 @@ export async function fetchRollingEngagement(
 /** Upsert performance rows from CSV import. */
 export async function upsertPerformance(rows: PerformanceRecord[]): Promise<void> {
   if (rows.length === 0) return
+  const supabase = getSupabase()
   const { error } = await supabase.from('performance_data').upsert(rows, {
     onConflict: 'content_item_id,platform',
   })
