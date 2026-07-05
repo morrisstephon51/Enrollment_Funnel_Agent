@@ -91,49 +91,83 @@ export async function fetchWeekContent(
   return { content, performance }
 }
 
-/** Fetch the last N weeks of total engagement for drop detection. */
+/** Fetch the last N weeks of total engagement for drop detection.
+ *  Uses 2 queries total (regardless of weeksBack) instead of 2×N serial queries.
+ */
 export async function fetchRollingEngagement(
   brandId: string,
   weeksBack: number,
   weekStart: Date
 ): Promise<number[]> {
   const supabase = getSupabase()
-  const totals: number[] = []
 
+  // Build week boundary arrays so we can bin slots by week index later.
+  const weekBoundaries: Array<{ start: Date; end: Date }> = []
   for (let i = 1; i <= weeksBack; i++) {
     const end = new Date(weekStart)
     end.setDate(end.getDate() - (i - 1) * 7)
     const start = new Date(end)
     start.setDate(start.getDate() - 7)
-
-    const { data: slots } = await supabase
-      .from('calendar_slots')
-      .select('content_item_id')
-      .eq('brand_id', brandId)
-      .eq('status', 'posted')
-      .gte('posted_at', start.toISOString())
-      .lte('posted_at', end.toISOString())
-
-    const ids = (slots ?? []).map((s: any) => s.content_item_id).filter(Boolean)
-    if (ids.length === 0) {
-      totals.push(0)
-      continue
-    }
-
-    const { data: perf } = await supabase
-      .from('performance_data')
-      .select('likes, comments, shares, saves')
-      .in('content_item_id', ids)
-
-    const total = (perf ?? []).reduce(
-      (sum: number, p: any) =>
-        sum + (p.likes ?? 0) + (p.comments ?? 0) * 3 + (p.shares ?? 0) * 5 + (p.saves ?? 0) * 2,
-      0
-    )
-    totals.push(total)
+    weekBoundaries.push({ start, end })
   }
 
-  return totals
+  const rangeStart = weekBoundaries[weekBoundaries.length - 1].start
+  const rangeEnd   = weekBoundaries[0].end
+
+  // Single query: all posted slots in the full N-week window.
+  const { data: slots, error: slotsErr } = await supabase
+    .from('calendar_slots')
+    .select('content_item_id, posted_at')
+    .eq('brand_id', brandId)
+    .eq('status', 'posted')
+    .gte('posted_at', rangeStart.toISOString())
+    .lte('posted_at', rangeEnd.toISOString())
+
+  if (slotsErr) throw new Error(`Supabase calendar_slots error: ${slotsErr.message}`)
+
+  // Map each slot to its week index.
+  const slotsByWeek: Map<number, string[]> = new Map()
+  for (const s of slots ?? []) {
+    const postedAt = new Date(s.posted_at)
+    const weekIdx = weekBoundaries.findIndex(
+      ({ start, end }) => postedAt >= start && postedAt <= end
+    )
+    if (weekIdx === -1 || !s.content_item_id) continue
+    if (!slotsByWeek.has(weekIdx)) slotsByWeek.set(weekIdx, [])
+    slotsByWeek.get(weekIdx)!.push(s.content_item_id)
+  }
+
+  const allIds = [...new Set((slots ?? []).map((s: any) => s.content_item_id).filter(Boolean))]
+
+  // Single query: performance for all IDs across all weeks.
+  const perfByItemId: Map<string, { likes: number; comments: number; shares: number; saves: number }> = new Map()
+  if (allIds.length > 0) {
+    const { data: perf, error: perfErr } = await supabase
+      .from('performance_data')
+      .select('content_item_id, likes, comments, shares, saves')
+      .in('content_item_id', allIds)
+
+    if (perfErr) throw new Error(`Supabase performance_data error: ${perfErr.message}`)
+
+    for (const p of perf ?? []) {
+      perfByItemId.set(p.content_item_id, {
+        likes:    p.likes    ?? 0,
+        comments: p.comments ?? 0,
+        shares:   p.shares   ?? 0,
+        saves:    p.saves    ?? 0,
+      })
+    }
+  }
+
+  // Aggregate by week in memory.
+  return weekBoundaries.map((_, i) => {
+    const ids = slotsByWeek.get(i) ?? []
+    return ids.reduce((sum, id) => {
+      const p = perfByItemId.get(id)
+      if (!p) return sum
+      return sum + p.likes + p.comments * 3 + p.shares * 5 + p.saves * 2
+    }, 0)
+  })
 }
 
 /** Upsert performance rows from CSV import. */
