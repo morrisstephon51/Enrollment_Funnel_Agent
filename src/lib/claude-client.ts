@@ -84,12 +84,16 @@ Tone: warm but data-informed. Avoid jargon. Write for a non-technical health pro
     // Fallback: extract JSON block from response
     const match = text.match(/\{[\s\S]*\}/)
     if (match) {
-      const parsed = JSON.parse(match[0])
-      return {
-        summary: parsed.summary ?? '',
-        doMoreOf: parsed.doMoreOf ?? '',
-        stopDoing: parsed.stopDoing ?? '',
-        enrollmentNote: parsed.enrollmentNote ?? '',
+      try {
+        const parsed = JSON.parse(match[0])
+        return {
+          summary: parsed.summary ?? '',
+          doMoreOf: parsed.doMoreOf ?? '',
+          stopDoing: parsed.stopDoing ?? '',
+          enrollmentNote: parsed.enrollmentNote ?? '',
+        }
+      } catch {
+        // fall through to safe return below
       }
     }
     return { summary: text.slice(0, 300), doMoreOf: '', stopDoing: '', enrollmentNote: '' }
@@ -101,13 +105,16 @@ export interface EnrollmentRow {
   medium?: string
   campaign?: string
   sessions?: number
+  [key: string]: string | number | undefined
 }
 
 function topUtmSources(rows: EnrollmentRow[]): string[] {
   const counts: Record<string, number> = {}
   for (const r of rows) {
-    const key = r.source ?? 'unknown'
-    counts[key] = (counts[key] ?? 0) + (r.sessions ?? 1)
+    // GA4 CSV exports use "Session source" / "Sessions"; fall back to normalized field names
+    const key = (r['Session source'] as string | undefined) ?? r.source ?? 'unknown'
+    const sessionCount = Number(r['Sessions'] ?? r.sessions ?? 1)
+    counts[key] = (counts[key] ?? 0) + sessionCount
   }
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
