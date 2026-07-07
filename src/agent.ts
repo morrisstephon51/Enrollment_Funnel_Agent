@@ -76,12 +76,14 @@ Output:
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function lastMonday(from: Date = new Date()): Date {
-  const d = new Date(from)
-  const day = d.getDay() // 0=Sun, 1=Mon...
+  // Pin to CT — agent runs for BigHeart Health in Chicago; near-midnight Sunday UTC
+  // would otherwise produce the wrong week label when the server is in UTC.
+  const ct = new Date(from.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+  const day = ct.getDay() // 0=Sun, 1=Mon...
   const diff = day === 0 ? 6 : day - 1
-  d.setDate(d.getDate() - diff)
-  d.setHours(0, 0, 0, 0)
-  return d
+  ct.setDate(ct.getDate() - diff)
+  ct.setHours(0, 0, 0, 0)
+  return ct
 }
 
 function addDays(d: Date, n: number): Date {
