@@ -57,6 +57,30 @@ Obsidian      ✅ vault found: <repo or Drive folder>   (or ❌ + one-line fix)
 Then, if the user gave a command along with `/remote-control`, execute it.
 Otherwise ask what they need — with 2-3 example commands.
 
+## Index-first access (token discipline)
+
+NEVER crawl a vault or Drive file-by-file to find something. Both services keep
+a small index file — read it first, jump straight to the file it points to,
+and only fall back to live search (`search_code` / `search_files`) when the
+index is missing, stale, or doesn't contain the target. Full spec:
+`references/indexing.md`.
+
+- **Vault index**: `_INDEX.md` at the vault repo root. One line per note —
+  path, one-line gist, tags, modified date.
+- **Drive index**: a Google Doc titled `_CLAUDE_INDEX — Google Drive`, stored
+  in Drive itself (never in a Git repo — Drive filenames are personal).
+  Current doc id: `17IdsMTLVIbhBv8RtF-qlQkZUrupBIqptowSW5_qHY9Q` — read it
+  directly with `read_file_content`; if that id is gone, find it with
+  `search_files: title contains '_CLAUDE_INDEX'`.
+
+`/remote-control index` (or "reindex", "rebuild the index") rebuilds them:
+walk the source, regenerate the file, write it back (commit to vault repo /
+update the Drive doc), and stamp the build date at the top.
+
+Maintenance is opportunistic: if a lookup misses or the stamp is >7 days old,
+tell the user the index is stale and offer to rebuild. After writing a new
+note through this skill, append its line to `_INDEX.md` in the same commit.
+
 ## Step 4 — Execute access commands
 
 | User says | Do |
