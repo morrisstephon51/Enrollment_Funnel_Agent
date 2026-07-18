@@ -28,6 +28,13 @@ attach it — never declare a repo unreachable before checking `list_repos`.
 
 ## Step 2 — Discover Obsidian vaults
 
+**Known canonical vault: `morrisstephon51/obsidian-kai`** (branch `main`,
+`_INDEX.md` at root). Add it to the session with `add_repo` and go straight to
+the index — no discovery needed. Two other obsidian-named repos exist and are
+NOT the vault: `kai-obsidian-vault` (older copy, July 2026) and `Onsidian`
+(empty, accidental). Only fall back to discovery below if `obsidian-kai` is
+gone or the user mentions a new vault.
+
 Obsidian vaults live on the user's devices; Claude reaches them only through a
 sync target. Check both, in this order:
 
