@@ -55,7 +55,11 @@ export function buildReport(opts: {
     totalEngagement,
   } = opts
 
-  const dateRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  // weekEnd is the exclusive query bound (the next Monday); the human-readable
+  // range should end on the inclusive last day of the week (the Sunday), so
+  // display weekEnd - 1 day without mutating weekEnd's query semantics.
+  const displayWeekEnd = new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000)
+  const dateRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${displayWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
   const generatedAt = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })
 
   const dropBanner = dropWarning?.dropped
