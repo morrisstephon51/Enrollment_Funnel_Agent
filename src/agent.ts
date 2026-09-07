@@ -169,7 +169,15 @@ async function main() {
   // ── Step 3: Score and rank ─────────────────────────────────────────────────
   const scored = scoreAndRank(merged)
   const top3 = scored.slice(0, 3)
-  const bottom3 = scored.slice(-3).reverse()
+  // Guard against overlap when fewer than 6 posts exist: `slice(0,3)` and
+  // `slice(-3)` intersect on small datasets, so the same post would be listed
+  // as both "post more like these" and "flagged for review" — contradictory
+  // guidance in the client report. Exclude anything already in top3.
+  const topIds = new Set(top3.map((p) => p.postId))
+  const bottom3 = scored
+    .filter((p) => !topIds.has(p.postId))
+    .slice(-3)
+    .reverse()
   const totalEngagement = scored.reduce((s, p) => s + computeEngagementScore(p), 0)
   const platforms = [...new Set(scored.map((p) => p.platform))]
 
