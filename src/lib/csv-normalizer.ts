@@ -70,13 +70,25 @@ const PLATFORM_MAPS: Record<string, ColumnMap> = {
   },
 }
 
-function detectPlatform(filename: string, headers: string[]): NormalizedRow['platform'] {
+export function detectPlatform(filename: string, headers: string[]): NormalizedRow['platform'] {
   const lower = filename.toLowerCase()
-  if (lower.includes('instagram') || lower.includes('ig')) return 'instagram'
-  if (lower.includes('tiktok') || lower.includes('tt')) return 'tiktok'
-  if (lower.includes('facebook') || lower.includes('fb') || lower.includes('meta'))
-    return 'facebook'
-  if (lower.includes('youtube') || lower.includes('yt')) return 'youtube'
+
+  // Full platform names are unambiguous — check these first so a file like
+  // "tiktok-insights.csv" is never mis-routed to Instagram just because
+  // "insights" happens to contain the substring "ig".
+  if (lower.includes('instagram')) return 'instagram'
+  if (lower.includes('tiktok')) return 'tiktok'
+  if (lower.includes('facebook') || lower.includes('meta')) return 'facebook'
+  if (lower.includes('youtube')) return 'youtube'
+
+  // Short codes (ig/tt/fb/yt) only match as whole filename tokens. Matching them
+  // as raw substrings misfires inside common words: "ig" in insights/highlights,
+  // "tt" in output, "yt" in analytics.
+  const tokens = lower.split(/[^a-z0-9]+/)
+  if (tokens.includes('ig')) return 'instagram'
+  if (tokens.includes('tt')) return 'tiktok'
+  if (tokens.includes('fb')) return 'facebook'
+  if (tokens.includes('yt')) return 'youtube'
 
   // Fallback: detect from unique column signatures
   const headerStr = headers.join(' ').toLowerCase()
