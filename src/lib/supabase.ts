@@ -62,7 +62,11 @@ export async function fetchWeekContent(
     .eq('brand_id', brandId)
     .eq('status', 'posted')
     .gte('posted_at', weekStart.toISOString())
-    .lte('posted_at', weekEnd.toISOString())
+    // weekEnd is the EXCLUSIVE next-Monday bound (weekStart + 7d), so the week
+    // window is half-open [weekStart, weekEnd). Using .lt (not .lte) keeps a post
+    // published exactly at the boundary Monday 00:00 out of two consecutive
+    // weekly reports (it belongs only to the week that STARTS at that instant).
+    .lt('posted_at', weekEnd.toISOString())
 
   if (slotsErr) throw new Error(`Supabase calendar_slots error: ${slotsErr.message}`)
 
@@ -121,7 +125,9 @@ export async function fetchRollingEngagement(
     .eq('brand_id', brandId)
     .eq('status', 'posted')
     .gte('posted_at', rangeStart.toISOString())
-    .lte('posted_at', rangeEnd.toISOString())
+    // Half-open upper bound: rangeEnd == current weekStart, so a boundary post at
+    // that instant belongs to the current week, not the most recent baseline week.
+    .lt('posted_at', rangeEnd.toISOString())
 
   if (slotsErr) throw new Error(`Supabase calendar_slots error: ${slotsErr.message}`)
 
@@ -130,7 +136,7 @@ export async function fetchRollingEngagement(
   for (const s of slots ?? []) {
     const postedAt = new Date(s.posted_at)
     const weekIdx = weekBoundaries.findIndex(
-      ({ start, end }) => postedAt >= start && postedAt <= end
+      ({ start, end }) => postedAt >= start && postedAt < end
     )
     if (weekIdx === -1 || !s.content_item_id) continue
     if (!slotsByWeek.has(weekIdx)) slotsByWeek.set(weekIdx, [])
