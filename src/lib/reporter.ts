@@ -66,12 +66,36 @@ export function buildReport(opts: {
     ? `\n> ⚠️ **ENGAGEMENT ALERT:** Total engagement dropped **${Math.abs(dropWarning.pctChange)}%** below the 4-week rolling average (baseline: ${fmtNum(dropWarning.baseline)} points). Review content strategy immediately.\n`
     : ''
 
+  // Each GA4 export row is one UTM source/grouping (e.g. "tiktok / social"), NOT one
+  // session. Printing trafficRows.length as "sessions" drastically understates real
+  // traffic — the sample export is 5 rows but 532 sessions (a 106x undercount). Sum the
+  // actual Sessions column (matching topUtmSources' column fallback) and report rows and
+  // sessions as the distinct quantities they are. Fall back to a row count only when the
+  // export carries no per-row session counts.
+  // Parse one row's session count, tolerating GA4's thousand-separators ("1,024")
+  // the same way csv-normalizer does. Returns NaN when the row has no session value.
+  const parseSessions = (r: EnrollmentRow): number => {
+    const raw = r['Sessions'] ?? r.sessions
+    if (raw === undefined || raw === null || raw === '') return NaN
+    return Number(String(raw).replace(/,/g, '').trim())
+  }
+  const sessionValues = enrollmentData
+    ? enrollmentData.trafficRows.map(parseSessions)
+    : []
+  const hasSessionColumn = sessionValues.some((n) => !Number.isNaN(n))
+  const totalSessions = sessionValues.reduce((sum, n) => sum + (Number.isNaN(n) ? 0 : n), 0)
+  const trafficLine = !enrollmentData
+    ? ''
+    : hasSessionColumn
+      ? `Traffic data provided: **${fmtNum(totalSessions)} sessions** across **${fmtNum(enrollmentData.trafficRows.length)} UTM source${enrollmentData.trafficRows.length === 1 ? '' : 's'}** this week.`
+      : `Traffic data provided: **${fmtNum(enrollmentData.trafficRows.length)} UTM source row${enrollmentData.trafficRows.length === 1 ? '' : 's'}** this week (the export carried no per-row session counts).`
+
   const enrollmentSection = enrollmentData
     ? `## Enrollment Page Correlation
 
 **URL:** ${enrollmentData.url}
 
-Traffic data provided: **${enrollmentData.trafficRows.length} sessions** from UTM-tagged sources this week.
+${trafficLine}
 
 ${narrative.enrollmentNote}
 `
