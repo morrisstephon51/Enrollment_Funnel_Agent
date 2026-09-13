@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import type { ScoredPost } from './scorer.js'
+import { parseSessionCount } from './claude-client.js'
 import type { ReportNarrative, EnrollmentRow } from './claude-client.js'
 
 function platformBadge(platform: string): string {
@@ -72,15 +73,11 @@ export function buildReport(opts: {
   // actual Sessions column (matching topUtmSources' column fallback) and report rows and
   // sessions as the distinct quantities they are. Fall back to a row count only when the
   // export carries no per-row session counts.
-  // Parse one row's session count, tolerating GA4's thousand-separators ("1,024")
-  // the same way csv-normalizer does. Returns NaN when the row has no session value.
-  const parseSessions = (r: EnrollmentRow): number => {
-    const raw = r['Sessions'] ?? r.sessions
-    if (raw === undefined || raw === null || raw === '') return NaN
-    return Number(String(raw).replace(/,/g, '').trim())
-  }
+  // Session counts are parsed by the shared parseSessionCount() (from
+  // claude-client.ts) so this client-facing total and the Claude-prompt
+  // UTM-source counts read the "Sessions" column identically and never drift.
   const sessionValues = enrollmentData
-    ? enrollmentData.trafficRows.map(parseSessions)
+    ? enrollmentData.trafficRows.map(parseSessionCount)
     : []
   const hasSessionColumn = sessionValues.some((n) => !Number.isNaN(n))
   const totalSessions = sessionValues.reduce((sum, n) => sum + (Number.isNaN(n) ? 0 : n), 0)
