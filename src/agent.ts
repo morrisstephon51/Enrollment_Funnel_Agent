@@ -18,7 +18,7 @@ import { generateNarrative } from './lib/claude-client.js'
 import { buildReport, saveReport } from './lib/reporter.js'
 import { fetchWeekContent, fetchRollingEngagement } from './lib/supabase.js'
 import { maybeCreateCanvaDoc } from './lib/canva-stub.js'
-import { parse as parseCSVEnrollment } from 'csv-parse/sync'
+import { parseEnrollmentCsv } from './lib/enrollment-csv.js'
 import fs from 'fs'
 
 // ─── CLI arg parsing ──────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ async function main() {
   if (opts.enrollmentCsv) {
     try {
       const raw = fs.readFileSync(path.resolve(opts.enrollmentCsv), 'utf-8')
-      const rows = parseCSVEnrollment(raw, { columns: true, skip_empty_lines: true, bom: true })
+      const rows = parseEnrollmentCsv(raw)
       enrollmentData = {
         url: process.env.ENROLLMENT_PAGE_URL ?? 'https://bighearthealth.com/enroll',
         trafficRows: rows,
