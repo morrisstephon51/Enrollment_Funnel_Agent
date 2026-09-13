@@ -108,12 +108,31 @@ export interface EnrollmentRow {
   [key: string]: string | number | undefined
 }
 
-function topUtmSources(rows: EnrollmentRow[]): string[] {
+/**
+ * Parse a GA4 "Sessions" cell, tolerating the thousand-separators GA4 emits in
+ * UI-exported CSVs ("1,024"). Returns NaN when the row carries no usable session
+ * value so each caller can pick its own fallback (reporter -> row count for the
+ * client line; topUtmSources -> assume 1 session per listed source).
+ *
+ * Single source of truth shared with reporter.ts so the two Sessions parsers
+ * cannot drift again: a bare Number("1,024") is NaN, which corrupted the
+ * UTM-source counts fed into the Claude prompt (the two biggest, comma-formatted
+ * sources rendered as "(NaN)" and were mis-sorted below a smaller source).
+ */
+export function parseSessionCount(row: EnrollmentRow): number {
+  const raw = row['Sessions'] ?? row.sessions
+  if (raw === undefined || raw === null || raw === '') return NaN
+  return Number(String(raw).replace(/,/g, '').trim())
+}
+
+export function topUtmSources(rows: EnrollmentRow[]): string[] {
   const counts: Record<string, number> = {}
   for (const r of rows) {
     // GA4 CSV exports use "Session source" / "Sessions"; fall back to normalized field names
     const key = (r['Session source'] as string | undefined) ?? r.source ?? 'unknown'
-    const sessionCount = Number(r['Sessions'] ?? r.sessions ?? 1)
+    // A row without a usable session count still names a real source -- count it as 1.
+    const parsed = parseSessionCount(r)
+    const sessionCount = Number.isNaN(parsed) ? 1 : parsed
     counts[key] = (counts[key] ?? 0) + sessionCount
   }
   return Object.entries(counts)
