@@ -6,7 +6,7 @@
   "scripts": {
     "report": "tsx src/agent.ts",
     "report:help": "tsx src/agent.ts --help",
-    "test": "tsx test/sessions.test.ts"
+    "test": "for f in test/*.test.ts; do echo \"# $f\"; tsx \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
