@@ -5,8 +5,26 @@ export interface ScoredPost extends NormalizedRow {
   normalizedScore: number // z-score within platform
 }
 
-/** Weighted engagement score — high-intent signals weighted above passive views. */
-export function computeEngagementScore(row: NormalizedRow): number {
+/**
+ * The four engagement counts every weighted score is built from. Kept as its own
+ * type so both the per-post score (CSV / Supabase rows) and the rolling-baseline
+ * aggregation (raw performance_data rows) can share ONE formula and never drift.
+ */
+export interface EngagementCounts {
+  likes: number
+  comments: number
+  shares: number
+  saves: number
+}
+
+/**
+ * Weighted engagement score — high-intent signals weighted above passive views.
+ * Single source of truth for the weights: the report's Scoring Methodology, the
+ * current-week total (agent.ts) and the drop-detection baseline
+ * (supabase.fetchRollingEngagement) all resolve here, so the "current vs 4-week
+ * average" comparison can never end up comparing two different formulas.
+ */
+export function computeEngagementScore(row: EngagementCounts): number {
   return row.likes * 1 + row.comments * 3 + row.shares * 5 + row.saves * 2
 }
 

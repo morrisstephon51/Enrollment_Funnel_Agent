@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { computeEngagementScore } from './scorer.js'
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config()
@@ -165,13 +166,16 @@ export async function fetchRollingEngagement(
     }
   }
 
-  // Aggregate by week in memory.
+  // Aggregate by week in memory. Reuse computeEngagementScore so this baseline
+  // and the current-week total (agent.ts) are guaranteed to apply identical
+  // weights -- the drop-detection comparison would be meaningless if the two
+  // sides ever diverged. perfByItemId rows are exactly the EngagementCounts shape.
   return weekBoundaries.map((_, i) => {
     const ids = slotsByWeek.get(i) ?? []
     return ids.reduce((sum, id) => {
       const p = perfByItemId.get(id)
       if (!p) return sum
-      return sum + p.likes + p.comments * 3 + p.shares * 5 + p.saves * 2
+      return sum + computeEngagementScore(p)
     }, 0)
   })
 }
