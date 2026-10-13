@@ -16,7 +16,7 @@ import { parseCSV } from './lib/csv-normalizer.js'
 import { scoreAndRank, checkEngagementDrop, computeEngagementScore } from './lib/scorer.js'
 import { generateNarrative } from './lib/claude-client.js'
 import { buildReport, saveReport } from './lib/reporter.js'
-import { fetchWeekContent, fetchRollingEngagement } from './lib/supabase.js'
+import { fetchWeekContent, fetchRollingEngagement, upsertPerformance, PerformanceRecord } from './lib/supabase.js'
 import { maybeCreateCanvaDoc } from './lib/canva-stub.js'
 import { parse as parseCSVEnrollment } from 'csv-parse/sync'
 import fs from 'fs'
@@ -146,6 +146,35 @@ async function main() {
           reach: perf.reach,
           linkClicks: perf.link_clicks,
         })
+      }
+      // Persist CSV metrics for matched content items so fetchRollingEngagement
+      // sees the current week when the agent next runs.
+      const contentByPlatformDate = new Map<string, string>()
+      for (const c of content) {
+        const key = `${c.platform}:${c.publish_date.slice(0, 10)}`
+        contentByPlatformDate.set(key, c.id)
+      }
+      const perfsToUpsert: PerformanceRecord[] = []
+      for (const row of allCsvRows) {
+        const key = `${row.platform}:${row.publishDate.slice(0, 10)}`
+        const contentItemId = contentByPlatformDate.get(key)
+        if (!contentItemId) continue
+        perfsToUpsert.push({
+          content_item_id: contentItemId,
+          platform: row.platform,
+          views: row.views,
+          likes: row.likes,
+          comments: row.comments,
+          shares: row.shares,
+          saves: row.saves,
+          reach: row.reach,
+          link_clicks: row.linkClicks,
+          recorded_at: row.publishDate,
+        })
+      }
+      if (perfsToUpsert.length > 0) {
+        await upsertPerformance(perfsToUpsert)
+        console.log(`[supabase] Persisted ${perfsToUpsert.length} CSV performance row(s) for rolling baseline`)
       }
     } catch (err) {
       console.warn(`[supabase] Could not fetch — running on CSV data only. Error: ${(err as Error).message}`)
