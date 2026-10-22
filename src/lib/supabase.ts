@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { computeEngagementScore } from './scorer.js'
+import { computeEngagementScore, type EngagementCounts } from './scorer.js'
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config()
@@ -132,22 +132,28 @@ export async function fetchRollingEngagement(
 
   if (slotsErr) throw new Error(`Supabase calendar_slots error: ${slotsErr.message}`)
 
-  // Map each slot to its week index.
-  const slotsByWeek: Map<number, string[]> = new Map()
+  // Assign each posted slot to its week index. A content item cross-posted to N
+  // platforms appears as N slots; it is de-duplicated per week inside
+  // aggregateWeeklyEngagement so its engagement is counted once, matching the
+  // current-week total's `.in(content_item_id)` set semantics in agent.ts.
+  const slotWeekAssignments: Array<{ weekIdx: number; contentItemId: string }> = []
   for (const s of slots ?? []) {
     const postedAt = new Date(s.posted_at)
     const weekIdx = weekBoundaries.findIndex(
       ({ start, end }) => postedAt >= start && postedAt < end
     )
     if (weekIdx === -1 || !s.content_item_id) continue
-    if (!slotsByWeek.has(weekIdx)) slotsByWeek.set(weekIdx, [])
-    slotsByWeek.get(weekIdx)!.push(s.content_item_id)
+    slotWeekAssignments.push({ weekIdx, contentItemId: s.content_item_id })
   }
 
   const allIds = [...new Set((slots ?? []).map((s: any) => s.content_item_id).filter(Boolean))]
 
-  // Single query: performance for all IDs across all weeks.
-  const perfByItemId: Map<string, { likes: number; comments: number; shares: number; saves: number }> = new Map()
+  // Single query: performance for all IDs across all weeks. performance_data is keyed
+  // on (content_item_id, platform) -- the same composite key upsertPerformance writes --
+  // so a cross-posted item has one row PER PLATFORM. Collect ALL rows per item; keying
+  // by content_item_id alone (as before) kept only whichever row the query returned last
+  // and silently dropped every other platform's engagement from the baseline.
+  const perfRowsByItem: Map<string, EngagementCounts[]> = new Map()
   if (allIds.length > 0) {
     const { data: perf, error: perfErr } = await supabase
       .from('performance_data')
@@ -157,26 +163,60 @@ export async function fetchRollingEngagement(
     if (perfErr) throw new Error(`Supabase performance_data error: ${perfErr.message}`)
 
     for (const p of perf ?? []) {
-      perfByItemId.set(p.content_item_id, {
+      const row: EngagementCounts = {
         likes:    p.likes    ?? 0,
         comments: p.comments ?? 0,
         shares:   p.shares   ?? 0,
         saves:    p.saves    ?? 0,
-      })
+      }
+      const rows = perfRowsByItem.get(p.content_item_id)
+      if (rows) rows.push(row)
+      else perfRowsByItem.set(p.content_item_id, [row])
     }
   }
 
-  // Aggregate by week in memory. Reuse computeEngagementScore so this baseline
-  // and the current-week total (agent.ts) are guaranteed to apply identical
-  // weights -- the drop-detection comparison would be meaningless if the two
-  // sides ever diverged. perfByItemId rows are exactly the EngagementCounts shape.
-  return weekBoundaries.map((_, i) => {
-    const ids = slotsByWeek.get(i) ?? []
-    return ids.reduce((sum, id) => {
-      const p = perfByItemId.get(id)
-      if (!p) return sum
-      return sum + computeEngagementScore(p)
-    }, 0)
+  // Aggregate by week. Reuse computeEngagementScore so this baseline and the current-week
+  // total (agent.ts) apply identical weights AND count the same per-platform rows the same
+  // way -- see aggregateWeeklyEngagement for why the old per-item collapse made the
+  // "-20% vs 4-week average" comparison measure two differently-shaped totals.
+  return aggregateWeeklyEngagement(slotWeekAssignments, perfRowsByItem, weekBoundaries.length)
+}
+
+/**
+ * Pure per-week engagement aggregator, factored out of fetchRollingEngagement so the
+ * baseline math is unit-testable without a live Supabase connection (and so the bug it
+ * fixes can be pinned by a non-tautological red->green test).
+ *
+ * For each week it takes the DISTINCT set of content items posted that week and sums
+ * computeEngagementScore over EVERY one of their performance rows (one row per platform)
+ * exactly once -- mirroring the current-week total in agent.ts, which scores one row per
+ * performance_data row returned by `.in(content_item_id)`. The previous implementation
+ * kept a single perf row per content_item_id (last-write-wins) and then re-counted that
+ * survivor once per platform slot, so a cross-posted item both double-counted the
+ * surviving platform and dropped the others. The weights already matched (PR #29); this
+ * makes the row-level aggregation match too, so drop detection compares like with like.
+ */
+export function aggregateWeeklyEngagement(
+  slotWeekAssignments: Array<{ weekIdx: number; contentItemId: string }>,
+  perfRowsByItem: Map<string, EngagementCounts[]>,
+  weekCount: number
+): number[] {
+  const distinctIdsByWeek: Array<Set<string>> = Array.from(
+    { length: weekCount },
+    () => new Set<string>()
+  )
+  for (const { weekIdx, contentItemId } of slotWeekAssignments) {
+    if (weekIdx < 0 || weekIdx >= weekCount || !contentItemId) continue
+    distinctIdsByWeek[weekIdx].add(contentItemId)
+  }
+  return distinctIdsByWeek.map((ids) => {
+    let total = 0
+    for (const id of ids) {
+      for (const row of perfRowsByItem.get(id) ?? []) {
+        total += computeEngagementScore(row)
+      }
+    }
+    return total
   })
 }
 
