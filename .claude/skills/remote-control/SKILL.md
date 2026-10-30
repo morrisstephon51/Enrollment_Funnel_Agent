@@ -81,12 +81,22 @@ index is missing, stale, or doesn't contain the target. Full spec:
   `search_files: title contains '_CLAUDE_INDEX'`.
 
 `/remote-control index` (or "reindex", "rebuild the index") rebuilds them:
-walk the source, regenerate the file, write it back (commit to vault repo /
-update the Drive doc), and stamp the build date at the top.
+
+- **Vault**: never walk it by hand. In a clone, run
+  `node _ops/build-index.mjs --check`, and if it reports drift run
+  `node _ops/build-index.mjs`, then commit `_INDEX.md` to `main`. The script
+  dates notes by file mtime, and a fresh clone gives every file today's
+  mtime, so first set each file's mtime to its last commit time (one pass
+  over `git log --format=@%ct --name-only`). Otherwise every date in the
+  index becomes today.
+- **Drive**: page through `list_recent_files` with
+  `excludeContentSnippets: true`, regenerate the doc per
+  `references/indexing.md`, and update the existing doc in place. This is the
+  only expensive operation in the skill, so run it only on request.
 
 Maintenance is opportunistic: if a lookup misses or the stamp is >7 days old,
-tell the user the index is stale and offer to rebuild. After writing a new
-note through this skill, append its line to `_INDEX.md` in the same commit.
+tell the user the index is stale and offer to rebuild. When you create,
+rename or delete a vault note, rebuild `_INDEX.md` in the same commit.
 
 ## Step 4 — Execute access commands
 
