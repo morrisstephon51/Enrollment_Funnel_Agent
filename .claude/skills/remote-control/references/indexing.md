@@ -6,6 +6,10 @@ indexes small, current, and boring.
 
 ## Vault index — `_INDEX.md` at the vault repo root
 
+When the vault has `_ops/build-index.mjs` (obsidian-kai does), that script
+defines the format and does the rebuild. The rules below describe the format
+for vaults that don't have it.
+
 ```markdown
 # Vault index — built 2026-07-17
 <!-- Rebuild with /remote-control index. One line per note. -->
