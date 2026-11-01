@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import type { ScoredPost } from './scorer.js'
+import { computeEngagementScore } from './scorer.js'
 import type { ReportNarrative, EnrollmentRow } from './claude-client.js'
 
 function platformBadge(platform: string): string {
@@ -15,6 +16,18 @@ function platformBadge(platform: string): string {
 
 function fmtNum(n: number): string {
   return n.toLocaleString('en-US')
+}
+
+// The client-facing Scoring Methodology must state the SAME weights the score
+// is actually computed with. computeEngagementScore is the single source of
+// truth for those weights (unified across scorer.ts + supabase.ts in #28); the
+// report previously hard-coded them as prose, a 4th copy that would silently
+// drift the moment the weights changed. Derive the displayed weights by probing
+// computeEngagementScore with unit vectors so the two can never disagree.
+function scoringFormulaLine(): string {
+  const weightOf = (metric: 'likes' | 'comments' | 'shares' | 'saves'): number =>
+    computeEngagementScore({ likes: 0, comments: 0, shares: 0, saves: 0, [metric]: 1 } as any)
+  return `(Likes x ${weightOf('likes')}) + (Comments x ${weightOf('comments')}) + (Shares x ${weightOf('shares')}) + (Saves x ${weightOf('saves')})`
 }
 
 function engagementTable(posts: ScoredPost[]): string {
@@ -162,7 +175,7 @@ ${enrollmentSection}
 ## Scoring Methodology
 
 Each post receives an **engagement score** calculated as:
-> (Likes x 1) + (Comments x 3) + (Shares x 5) + (Saves x 2)
+> ${scoringFormulaLine()}
 
 Posts are **ranked within their platform** (normalized by z-score) to account for platform audience size differences. Views are reported but excluded from the score — they measure exposure, not intent.
 
