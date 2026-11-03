@@ -192,6 +192,9 @@ async function main() {
       dropWarning = checkEngagementDrop(totalEngagement, rolling)
       if (dropWarning.dropped) {
         console.warn(`\n⚠️  ALERT: Engagement down ${Math.abs(dropWarning.pctChange)}% vs 4-week avg`)
+      } else if (!dropWarning.hasBaseline) {
+        // Don't let "no baseline" masquerade as "no drop" — make the blind spot loud.
+        console.warn('\n⚠️  Drop detection inactive: no 4-week baseline in performance_data (report will note this).')
       }
     } catch {
       // Non-fatal — rolling data optional

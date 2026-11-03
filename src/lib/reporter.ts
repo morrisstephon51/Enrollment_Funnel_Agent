@@ -36,7 +36,7 @@ export function buildReport(opts: {
   bottom3: ScoredPost[]
   narrative: ReportNarrative
   enrollmentData: { url: string; trafficRows: EnrollmentRow[] } | null
-  dropWarning: { dropped: boolean; pctChange: number; baseline: number } | null
+  dropWarning: { dropped: boolean; pctChange: number; baseline: number; hasBaseline: boolean } | null
   platforms: string[]
   totalPosts: number
   totalEngagement: number
@@ -62,9 +62,16 @@ export function buildReport(opts: {
   const dateRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${displayWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
   const generatedAt = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })
 
+  // Three distinct states, not two. A drop fires the alert; a present-but-stable
+  // baseline stays quiet; but "no baseline at all" must NOT read as all-clear —
+  // it means drop detection ran blind (new brand, or the CSV-only workflow where
+  // performance rows are never persisted). Say so plainly instead of showing
+  // nothing, which the client would otherwise read as "engagement is fine."
   const dropBanner = dropWarning?.dropped
     ? `\n> ⚠️ **ENGAGEMENT ALERT:** Total engagement dropped **${Math.abs(dropWarning.pctChange)}%** below the 4-week rolling average (baseline: ${fmtNum(dropWarning.baseline)} points). Review content strategy immediately.\n`
-    : ''
+    : dropWarning && !dropWarning.hasBaseline
+      ? `\n> ℹ️ **Drop detection inactive:** no 4-week engagement baseline is available yet, so this report cannot flag a week-over-week drop. A stable-looking result here does NOT mean engagement held. Baseline builds once weekly performance data is persisted across consecutive weeks.\n`
+      : ''
 
   // Each GA4 export row is one UTM source/grouping (e.g. "tiktok / social"), NOT one
   // session. Printing trafficRows.length as "sessions" drastically understates real
