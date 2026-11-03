@@ -1,0 +1,20 @@
+name: test
+
+# Runs the repo's test/*.test.ts guards on every push and PR.
+# Added because the drop-alert fixes (#28/#29, #34/#35, etc.) each ship a guard
+# test, but the repo had no `npm test` script and no CI, so none of them ran.
+on:
+  push:
+    branches: [ "claude/keen-noether-VED1j" ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
