@@ -74,27 +74,9 @@ Output:
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
-
-function lastMonday(from: Date = new Date()): Date {
-  // Pin to CT — agent runs for BigHeart Health in Chicago; near-midnight Sunday UTC
-  // would otherwise produce the wrong week label when the server is in UTC.
-  const ct = new Date(from.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-  const day = ct.getDay() // 0=Sun, 1=Mon...
-  const diff = day === 0 ? 6 : day - 1
-  ct.setDate(ct.getDate() - diff)
-  ct.setHours(0, 0, 0, 0)
-  return ct
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d)
-  r.setDate(r.getDate() + n)
-  return r
-}
-
-function toWeekLabel(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
+// Week windows are pinned to America/Chicago in ./lib/week.ts so the Supabase
+// posted_at bounds are true CT midnights regardless of the host timezone.
+import { lastMonday, addCtDays, parseWeekArg, toWeekLabel } from './lib/week.js'
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
@@ -108,8 +90,8 @@ async function main() {
   }
 
   // Resolve week window
-  const weekStart = opts.week ? new Date(opts.week + 'T00:00:00') : lastMonday()
-  const weekEnd = addDays(weekStart, 7)
+  const weekStart = opts.week ? parseWeekArg(opts.week) : lastMonday()
+  const weekEnd = addCtDays(weekStart, 7)
   const weekLabel = toWeekLabel(weekStart)
 
   console.log(`\n🗓  Week: ${weekLabel} → ${toWeekLabel(weekEnd)}`)
