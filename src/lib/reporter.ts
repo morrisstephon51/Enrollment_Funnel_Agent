@@ -55,11 +55,13 @@ export function buildReport(opts: {
     totalEngagement,
   } = opts
 
-  // weekEnd is the exclusive query bound (the next Monday); the human-readable
-  // range should end on the inclusive last day of the week (the Sunday), so
-  // display weekEnd - 1 day without mutating weekEnd's query semantics.
-  const displayWeekEnd = new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000)
-  const dateRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${displayWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  // weekEnd is the exclusive query bound (Monday 00:00 CT). The range ends on
+  // the Chicago calendar day of the last instant BEFORE it (the Sunday). A
+  // fixed 24h step back lands on Saturday 23:00 CT when that Sunday is the 23h
+  // spring-forward day, and formatting without timeZone shifts both dates a
+  // day early on hosts west of Chicago (#42).
+  const displayWeekEnd = new Date(weekEnd.getTime() - 1)
+  const dateRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Chicago' })} – ${displayWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' })}`
   const generatedAt = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })
 
   const dropBanner = dropWarning?.dropped
