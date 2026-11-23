@@ -98,3 +98,17 @@ export function toWeekLabel(d: Date): string {
   const { y, m, d: day } = ctYmd(d)
   return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
+
+/**
+ * The `weeksBack` Chicago weeks before `weekStart`, newest first, as half-open
+ * [start, end) pairs of true CT Monday midnights. Index 0 ends at `weekStart`.
+ * Steps by Chicago calendar days, so a week that spans a DST change is 167h or
+ * 169h long instead of a fixed 168h.
+ */
+export function rollingWeekBounds(weekStart: Date, weeksBack: number): Array<{ start: Date; end: Date }> {
+  const out: Array<{ start: Date; end: Date }> = []
+  for (let i = 1; i <= weeksBack; i++) {
+    out.push({ start: addCtDays(weekStart, -7 * i), end: addCtDays(weekStart, -7 * (i - 1)) })
+  }
+  return out
+}

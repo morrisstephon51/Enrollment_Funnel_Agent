@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import dotenv from 'dotenv'
+import { rollingWeekBounds } from './week.js'
 dotenv.config({ path: '.env.local' })
 dotenv.config()
 
@@ -106,14 +107,9 @@ export async function fetchRollingEngagement(
   const supabase = getSupabase()
 
   // Build week boundary arrays so we can bin slots by week index later.
-  const weekBoundaries: Array<{ start: Date; end: Date }> = []
-  for (let i = 1; i <= weeksBack; i++) {
-    const end = new Date(weekStart)
-    end.setDate(end.getDate() - (i - 1) * 7)
-    const start = new Date(end)
-    start.setDate(start.getDate() - 7)
-    weekBoundaries.push({ start, end })
-  }
+  // Step back in Chicago calendar weeks (not host-local setDate), so each
+  // baseline boundary is a true CT Monday midnight on any host, including DST weeks.
+  const weekBoundaries: Array<{ start: Date; end: Date }> = rollingWeekBounds(weekStart, weeksBack)
 
   const rangeStart = weekBoundaries[weekBoundaries.length - 1].start
   const rangeEnd   = weekBoundaries[0].end
